@@ -1,0 +1,304 @@
+Index: sites/all/modules/contrib/fillpdf/fillpdf.admin.inc
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- sites/all/modules/contrib/fillpdf/fillpdf.admin.inc	(revision 59791722197268f715402d5b6babd12c96433b22)
++++ sites/all/modules/contrib/fillpdf/fillpdf.admin.inc	(date 1523366744000)
+@@ -37,6 +37,7 @@
+   $options = array(
+     'pdftk' => t('Use locally-installed pdftk: You will need a VPS or a dedicated server so you can install pdftk: (!see_documentation).', array('!see_documentation' => l(t('see documentation'), 'http://drupal.org/documentation/modules/fillpdf'))),
+     'local' => t('Use locally-installed PHP/JavaBridge: You will need a VPS or dedicated server so you can deploy PHP/JavaBridge on Apache Tomcat: (!see_documentation).', array('!see_documentation' => l(t('see documentation'), 'http://drupal.org/documentation/modules/fillpdf'))),
++    'rest' => t('Use PDFTK with RESTful API: You will be using a dockered/VM/bear metal service wrapped PDFTK: (!see_documentation).', array('!see_documentation' => l(t('see documentation'), 'https://github.com/wilroboly/pdf-filler'))),
+     'remote' => t('Use FillPDF Service: Sign up for <a href="https://fillpdf.io">FillPDF Service</a>.'),
+   );
+ 
+@@ -58,11 +59,35 @@
+     '#default_value' => $fillpdf_service,
+     '#options' => $options,
+   );
++
++
++  // LOCAL settings
++  $form['fillpdf_pdftk_path'] = array(
++    '#type' => 'textfield',
++    '#title' => t('Configure path to pdftk'),
++    '#description' => t("If FillPDF is not detecting your pdftk installation, you can specify the full path to the program here. Include the program name as well. For example, <em>/usr/bin/pdftk</em> is a valid value. You can almost always leave this field blank. If you should set it, you'll probably know."),
++    '#default_value' => variable_get('fillpdf_pdftk_path'),
++    '#states' => array(
++      'visible' => array(
++        ':input[name="fillpdf_service"]' => array(
++          array('value' => 'local'),
++          array('value' => 'pdftk')
++        ),
++      ),
++    ),
++  );
++
++  // REMOTE settings
+   $form['remote'] = array(
+     '#type' => 'fieldset',
+     '#title' => t('Configure FillPDF Service'),
+     '#collapsible' => TRUE,
+     '#collapsed' => $fillpdf_service !== 'remote',
++    '#states' => array(
++      'visible' => array(
++        ':input[name="fillpdf_service"]' => array('value' => 'remote'),
++      ),
++    ),
+   );
+   $form['remote']['fillpdf_remote_endpoint'] = array(
+     '#type' => 'textfield',
+@@ -87,12 +112,42 @@
+       'http' => t('Do not use HTTPS'),
+     ),
+   );
+-  $form['fillpdf_pdftk_path'] = array(
++
++  // RESTful settings
++  $form['rest'] = array(
++    '#type' => 'fieldset',
++    '#title' => t('Configure RESTful PDFTK Service'),
++    '#collapsible' => TRUE,
++    '#collapsed' => $fillpdf_service !== 'rest',
++    '#states' => array(
++      'visible' => array(
++        ':input[name="fillpdf_service"]' => array('value' => 'rest'),
++      ),
++    ),
++  );
++  $form['rest']['fillpdf_rest_endpoint'] = array(
+     '#type' => 'textfield',
+-    '#title' => t('Configure path to pdftk'),
+-    '#description' => t("If FillPDF is not detecting your pdftk installation, you can specify the full path to the program here. Include the program name as well. For example, <em>/usr/bin/pdftk</em> is a valid value. You can almost always leave this field blank. If you should set it, you'll probably know."),
+-    '#default_value' => variable_get('fillpdf_pdftk_path'),
++    '#title' => t('Service endpoint'),
++    '#default_value' => variable_get('fillpdf_rest_endpoint', 'rest.endpoint.local/api/1.0/pdftk'),
++    '#description' => t('tbd'),
++  );
++  $form['rest']['fillpdf_rest_api_key'] = array(
++    '#type' => 'textfield',
++    '#title' => t('API Key'),
++    '#default_value' => variable_get('fillpdf_rest_api_key', '0'),
++    '#description' => t('You can setup this us with your own SHA key or whatever your REST API uses.'),
+   );
++  $form['rest']['fillpdf_rest_protocol'] = array(
++    '#type' => 'radios',
++    '#title' => t('Use HTTPS?'),
++    '#description' => t('HTTPS is always preferrable, but likely the service is in an internal network, so this may not be as important.'),
++    '#default_value' => variable_get('fillpdf_rest_protocol', 'https'),
++    '#options' => array(
++      'https' => t('Use HTTPS'),
++      'http' => t('Do not use HTTPS'),
++    ),
++  );
++
+ 
+   drupal_add_js(drupal_get_path('module', 'fillpdf') . '/fillpdf.js');
+ 
+Index: sites/all/modules/contrib/fillpdf/fillpdf.module
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- sites/all/modules/contrib/fillpdf/fillpdf.module	(revision 59791722197268f715402d5b6babd12c96433b22)
++++ sites/all/modules/contrib/fillpdf/fillpdf.module	(date 1523451227000)
+@@ -7,7 +7,15 @@
+ 
+ require_once dirname(__FILE__) . '/fillpdf.deprecated.inc';
+ 
+-define("FILLPDF_DEFAULT_SERVLET_URL", variable_get('fillpdf_remote_protocol', 'https') . "://" . variable_get('fillpdf_remote_endpoint', "fillpdf.io/xmlrpc.php"));
++if (variable_get('fillpdf_service') == 'rest') {
++  $url = variable_get('fillpdf_rest_protocol', 'https') . "://" . variable_get('fillpdf_rest_endpoint', 'rest.endpoint.local/api/1.0/pdftk');
++} else if (variable_get('fillpdf_service') == 'remote') {
++  $url = variable_get('fillpdf_remote_protocol', 'https') . "://" . variable_get('fillpdf_remote_endpoint', "fillpdf.io/xmlrpc.php");
++} else {
++  $url = '';
++}
++define("FILLPDF_DEFAULT_SERVLET_URL",$url);
++
+ module_load_include('inc', 'fillpdf', 'fillpdf.admin');
+ 
+ /**
+@@ -1222,6 +1230,52 @@
+ 
+   $contents = _fillpdf_get_file_contents($filename, '<front>');
+   switch ($method) {
++    // RESTful API service.
++    case 'rest':
++      $api_key = variable_get('fillpdf_rest_api_key', '0');
++
++      $uri =  variable_get('fillpdf_scheme', 'public');
++      if ($wrapper = file_stream_wrapper_get_instance_by_uri($uri . '://')) {
++        $target = file_uri_target($filename);
++        $site_url = $wrapper->getExternalUrl();
++        $fields += array(
++          'pdf' => $site_url . $target
++        );
++      }
++
++      // We're borrowing these lines from the 'remote' service just in case we need it
++      // at this time though, since we're not actually making use of images, this
++      // maybe a bit redundant.
++      foreach ($fields as $field_name => &$field) {
++        if (!empty($image_data[$field_name])) {
++          $field_path_info = pathinfo($field);
++          $field = '{image}' . md5($field_path_info['filename']) . '.' . $field_path_info['extension'];
++        }
++      }
++      unset($field);
++
++      $params = [
++        'method'      => 'POST',
++        'action'      => 'fill',
++        'contents'    => base64_encode($contents),
++        'fields'      => $fields,
++        'key'         => $api_key,
++        'flatten'     => $flatten,
++        'image_data'  => $image_data,
++        'filename'    => $filename
++      ];
++
++      $result = _fillpdf_api_json_request(FILLPDF_DEFAULT_SERVLET_URL, $params);
++
++      if ($result->error == TRUE) {
++        // Instead of going to homepage, go to where we came from.
++        // drupal_destination()
++        drupal_goto();
++      } // after setting error message
++
++      $data = $result->data;
++      break;
++
+     // FillPDF Service.
+     case 'remote':
+       $api_key = variable_get('fillpdf_api_key', '0');
+@@ -1419,6 +1473,50 @@
+   }
+ 
+   switch ($method) {
++    case 'rest':
++
++      $api_key = variable_get('fillpdf_rest_api_key', '0');
++
++      $uri =  variable_get('fillpdf_scheme', 'public');
++      if ($wrapper = file_stream_wrapper_get_instance_by_uri($uri . '://')) {
++        $target = file_uri_target($filename);
++        $site_url = $wrapper->getExternalUrl();
++        $pdf = array(
++          'pdf' => $site_url . $target
++        );
++      }
++
++      $params = [
++        'method'      => 'GET',
++        'action'      => 'fields.json',
++        'key'         => $api_key,
++        'fields'      => $pdf
++      ];
++
++      $result = _fillpdf_api_json_request(FILLPDF_DEFAULT_SERVLET_URL, $params);
++
++      if ($result->error == TRUE) {
++        drupal_goto('admin/structure/fillpdf');
++      } // after setting error message
++      $fields = drupal_json_decode($result->data);
++
++      if (count($fields) === 0) {
++        drupal_set_message(t('PDF does not contain fillable fields.'), 'warning');
++        return array();
++      }
++
++      // Build a simple map of dump_data_fields keys to our own array keys.
++      $data_fields_map = array(
++        'type'            =>  'FieldType',
++        'name'            =>  'FieldName',
++        'flags'           =>  'FieldFlags',
++        'justification'   =>  'FieldJustification'
++      );
++
++      _fillpdf_replace_pdf_field_keys($fields, $data_fields_map);
++
++      break;
++
+     case 'remote':
+       $result = _fillpdf_xmlrpc_request(FILLPDF_DEFAULT_SERVLET_URL, 'parse_pdf_fields', base64_encode($content));
+       if ($result->error == TRUE) {
+@@ -1525,6 +1623,58 @@
+   return $content;
+ }
+ 
++/**
++ * Helper Function to make RESTful API JSON requests
++ */
++function _fillpdf_api_json_request($url, $params) {
++
++  $params += [
++    'method'      => 'POST',
++    'action'      => 'fill',
++    'contents'    => '',
++    'fields'      => '',
++    'key'         => '',
++    'flatten'     => '',
++    'image_data'  => '',
++    'filename'    => ''
++  ];
++
++  extract($params);
++
++  $headers = array('Content-Type' => 'multipart/form-data');
++
++  $data = http_build_query($fields, '', '&');
++
++  $options = array(
++    'headers' => $headers,
++    'method' => $method,
++    'data' => $data,
++  );
++
++  $result = drupal_http_request($url . '/' . $action, $options);
++
++  $ret = new stdClass();
++  if (isset($result->error)) {
++    drupal_set_message($result->error, 'error');
++    $ret->error = TRUE;
++  }
++  elseif ($result == FALSE) {
++    //$error = xmlrpc_error();
++    $error = 'boop!';
++
++    $ret->error = TRUE;
++    drupal_set_message(t('There was a problem contacting the PDFTK RESTful Service.
++      It may be down, or some sort of network access issue. [ERROR @code: @message]',
++      array('@code' => $error->code, '@message' => $error->message)), 'error');
++  }
++  else {
++    $ret->data = $result->data;
++    $ret->error = FALSE;
++  }
++
++  return $ret;
++}
++
+ /**
+  *
+  */
+@@ -1815,3 +1965,17 @@
+ 
+   return FALSE;
+ }
++
++function _fillpdf_replace_pdf_field_keys(&$array, $keymap) {
++  foreach($array as $key => $array_values) {
++    foreach ($array[$key] as $value){
++      foreach ($keymap as $new_key => $original_key) {
++        if (!isset($array[$key][$new_key])) {
++          $array[$key][$new_key] = $array[$key][$original_key];
++          unset($array[$key][$original_key]);
++        }
++      }
++    }
++  }
++  return TRUE;
++}
+\ No newline at end of file

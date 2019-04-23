@@ -1,0 +1,67 @@
+diff --git a/fillpdf.module b/fillpdf.module
+index 2c1a0a7..fd44f0e 100644
+--- a/fillpdf.module
++++ b/fillpdf.module
+@@ -261,12 +261,14 @@ function fillpdf_file_download_access_alter(&$grants, $file_item, $entity_type,
+ function fillpdf_pdf_link($fid, $nids = NULL, array $webform_arr = NULL, $sample = FALSE, $uc_order_ids = NULL, $uc_order_product_ids = NULL) {
+   $nids_uri = $webforms_uri = $uc_orders_uri = $uc_order_products_uri = "";
+ 
++  $query = array('fid' => $fid);
++
+   // If an integer was provided, recast into a single-element array.
+   if ($nids && !is_array($nids)) {
+     $nids = array($nids);
+   }
+   if (is_array($nids) && count($nids)) {
+-    $nids_uri = '&nids[]=' . implode('&nids[]=', $nids);
++    $query['nids'] = implode('&nids[]=', $nids);
+   }
+ 
+   if (is_array($webform_arr) && count($webform_arr)) {
+@@ -274,29 +276,37 @@ function fillpdf_pdf_link($fid, $nids = NULL, array $webform_arr = NULL, $sample
+       $webform_arr = array($webform_arr);
+     }
+     foreach ($webform_arr as $key => $webform) {
+-      $webforms_uri .= "&webforms[{$key}][nid]={$webform['nid']}";
+-      $webforms_uri .= isset($webform['sid']) ? "&webforms[{$key}][sid]={$webform['sid']}" : "";
++      $query += ["webforms[{$key}][nid]" => $webform['nid']];
++      if (isset($webform['sid'])) {
++        $query += ["webforms[{$key}][sid]" => $webform['sid']];
++      }
+     }
+   }
+ 
+   if (is_array($uc_order_ids) && count($uc_order_ids)) {
+-    $uc_orders_uri = '&uc_order_ids[]=' . implode('&uc_order_ids[]=', $uc_order_ids);
++    $query += ["uc_order_ids[]" => implode('&uc_order_ids[]=', $uc_order_ids)];
+   }
+   elseif (isset($uc_order_ids)) {
+-    $uc_orders_uri = "&uc_order_ids[]={$uc_order_ids}";
++    $query += ["uc_order_ids[]" => $uc_order_ids];
+   }
+ 
+   if (is_array($uc_order_product_ids) && count($uc_order_product_ids)) {
+-    $uc_order_products_uri = '&uc_order_product_ids[]=' . implode('&uc_order_product_ids[]=', $uc_order_product_ids);
++    $query += ["uc_order_product_ids[]" => implode('&uc_order_product_ids[]=', $uc_order_product_ids)];
+   }
+   elseif (isset($uc_order_product_ids)) {
+-    $uc_order_products_uri = "&uc_order_product_ids[]={$uc_order_product_ids}";
++    $query += ["uc_order_product_ids[]" => $uc_order_product_ids];
+   }
+ 
+-  $sample = $sample ? '&sample=true' : '';
++  if ($sample) {
++    $query += ['sample' => 'true'];
++  }
+ 
+-  // @todo: Refactor to use real url() syntax once tests in place
+-  return url('', array('absolute' => TRUE)) . "fillpdf?fid={$fid}{$nids_uri}{$webforms_uri}{$uc_orders_uri}{$uc_order_products_uri}{$sample}";
++  //array('fid' => "{$fid}{$nids_uri}{$webforms_uri}{$uc_orders_uri}{$uc_order_products_uri}{$sample}")
++  $options = array(
++    'query' => $query,
++    'absolute' => TRUE,
++  );
++  return url('fillpdf', $options);
+ }
+ 
+ /**

@@ -1,0 +1,77 @@
+diff --git a/sites/all/modules/contrib/fillpdf/fillpdf.module b/sites/all/modules/contrib/fillpdf/fillpdf.module
+index a5237b0d8..503db135c 100644
+--- a/sites/all/modules/contrib/fillpdf/fillpdf.module
++++ b/sites/all/modules/contrib/fillpdf/fillpdf.module
+@@ -952,6 +952,32 @@ function fillpdf_merge_perform_pdf_action($fillpdf_object, $action = 'download',
+     return;
+   }
+
++  // If we are doing all this with an ANONYMOUS user, we need to setup some tracking values.
++  if (user_access('publish session pdfs')) {
++    if (drupal_session_started()) {
++      $data = $_SESSION['webform_data'];
++      $session_id = session_id();
++
++      if ($data == NULL) {
++        $submissions[$webforms[0]['submission']->sid] = $webforms[0]['webform']->uuid;
++        $data['wedform_submissions'] = $submissions;
++      } else {
++        $submissions = $data['wedform_submissions'];
++        $submissions[$webforms[0]['submission']->sid] = $webforms[0]['webform']->uuid;
++        $data['wedform_submissions'] = $submissions;
++      }
++    } else {
++      drupal_session_start();
++      $submissions[$webforms[0]['submission']->sid] = $webforms[0]['webform']->uuid;
++      $data = [
++        'wedform_submissions' => $submissions,
++      ];
++    }
++    $_SESSION['session_id'] = $session_id;
++    $_SESSION['webform_data'] = $data;
++
++  }
++
+   // Generate the filename of downloaded PDF from title of the PDF set in
+   // admin/structure/fillpdf/%fid.
+   $output_name = _fillpdf_process_filename($pdf_info->title, $token_objects);
+@@ -1097,6 +1123,39 @@ function fillpdf_fillpdf_merge_pre_handle($fillpdf) {
+  */
+ function fillpdf_merge_pdf_access($nodes = array(), $webforms = array(), $uc_orders = array(), $uc_order_products = array()) {
+
++
++
++  // TODO: Add the 'publish session pdfs' session limiter here.
++  // https://api.drupal.org/api/drupal/includes%21session.inc/function/drupal_session_start/7.x
++
++  // Because we are doing this using anonymous submissions, we may not want the PDF to be downloaded by someone else.
++  // Therefore, by starting a session, locking the submission information to the session, we can ensure some level
++  // of privacy. Restricting the download to ONLY the active session. Thus, all submissions done within this session
++  // can be "fillpdf" accessed. But after that, deny access unless an administrator is present.
++
++  // TODO: Check that PDF cannot be in fact downloaded if they aren't the users webform submission
++
++  if (user_access('publish session pdfs')) {
++    if (drupal_session_started()) {
++      $data = $_SESSION['webform_data'];
++      $session_id = session_id();
++      if (isset($_SESSION['webform_data']['wedform_submissions'][$webforms[0]->uuid])) {
++
++      }
++      if ($data == NULL) {
++
++      } else {
++
++      }
++    } else {
++      drupal_session_start();
++
++    }
++    $_SESSION['session_id'] = $session_id;
++    $_SESSION['webform_data'] = $data;
++
++  }
++
+   if (user_access('administer pdfs') || user_access('publish all pdfs') || user_access('publish session pdfs')) {
+     return TRUE;
+   }

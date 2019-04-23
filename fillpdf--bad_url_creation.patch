@@ -1,0 +1,19 @@
+Index: sites/all/modules/contrib/fillpdf/fillpdf.module
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- sites/all/modules/contrib/fillpdf/fillpdf.module	(date 1524101728000)
++++ sites/all/modules/contrib/fillpdf/fillpdf.module	(date 1524152895000)
+@@ -296,7 +296,11 @@
+   $sample = $sample ? '&sample=true' : '';
+ 
+   // @todo: Refactor to use real url() syntax once tests in place
+-  return url('', array('absolute' => TRUE)) . "fillpdf?fid={$fid}{$nids_uri}{$webforms_uri}{$uc_orders_uri}{$uc_order_products_uri}{$sample}";
++  $options = array(
++    'query' => array('fid' => "{$fid}{$nids_uri}{$webforms_uri}{$uc_orders_uri}{$uc_order_products_uri}{$sample}"),
++    'absolute' => TRUE,
++  );
++  return url('fillpdf', $options);
+ }
+ 

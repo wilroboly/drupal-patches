@@ -1,0 +1,26 @@
+Index: sites/all/modules/contrib/webform_attributes/webform_attributes.module
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- sites/all/modules/contrib/webform_attributes/webform_attributes.module	(revision b15555de9448da1a1552c113153ef9537196d26a)
++++ sites/all/modules/contrib/webform_attributes/webform_attributes.module	(revision 702dcca991d621c7c1a926d6684e5f388add6a43)
+@@ -19,10 +19,17 @@
+ function webform_attributes_form_webform_admin_settings_alter(&$form) {
+   _webform_attributes_files_include();
+ 
++  $webform_components = webform_component_options(TRUE);
++  // Add missing component types as "select" is not a component type in HTML for checkboxes and radion buttons.
++  $webform_components['checkbox'] = t('Checkbox');
++  $webform_components['checkboxes'] = t('Checkboxes');
++  $webform_components['radio'] = t('Radio Button');
++  $webform_components['radios'] = t('Radio Buttons');
++
+   $form['advanced']['webform_attributes_which_component_allowed_html_attribute'] = array(
+     '#type'          => 'checkboxes',
+     '#default_value' => webform_attributes_get_which_component_allowed_html_attribute(),
+-    '#options'       => webform_component_options(TRUE),
++    '#options'       => $webform_components,
+     '#title'         => t('Choose which component you can add HTML attributes:'),
+     '#description'   => t('Choose which component you can add HTML attributes, by default all components are enabled.'),
+     '#required'      => FALSE,
